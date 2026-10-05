@@ -1,5 +1,5 @@
-
 import sys
+from array import array
 
 
 def read_lines(path):
@@ -17,16 +17,13 @@ def read_lines(path):
 def myers_diff(a, b):
     n = len(a)
     m = len(b)
-
     max_d = n + m
 
-    # V[k] stores the furthest x position reached
-    # on diagonal k.
-    v = {0: 0}
+    # V for d = 0.
+    # Index for diagonal k is k + d.
+    v = array("i", [0])
 
-    trace = []
-
-    # Follow the initial matching "snake".
+    # Follow the initial matching snake.
     x = 0
     y = 0
 
@@ -40,23 +37,34 @@ def myers_diff(a, b):
     if x == n and y == m:
         return [(" ", value) for value in a]
 
-    for d in range(1, max_d + 1):
-        trace.append(v.copy())
+    # Store previous V arrays for backtracking.
+    trace = [v]
 
-        new_v = {}
+    for d in range(1, max_d + 1):
+        new_v = array("i", [0]) * (2 * d + 1)
 
         for k in range(-d, d + 1, 2):
 
+            # Get V[k - 1] and V[k + 1] from previous layer.
+            if k - 1 < -(d - 1):
+                left = -1
+            else:
+                left = v[(k - 1) + (d - 1)]
+
+            if k + 1 > (d - 1):
+                right = -1
+            else:
+                right = v[(k + 1) + (d - 1)]
+
             # Move down: insertion.
             if k == -d or (
-                k != d
-                and v.get(k - 1, -1) < v.get(k + 1, -1)
+                k != d and left < right
             ):
-                x = v.get(k + 1, 0)
+                x = right
 
             # Move right: deletion.
             else:
-                x = v.get(k - 1, 0) + 1
+                x = left + 1
 
             y = x - k
 
@@ -65,14 +73,14 @@ def myers_diff(a, b):
                 x += 1
                 y += 1
 
-            new_v[k] = x
+            new_v[k + d] = x
 
-            # Reached the end of both sequences.
+            # Reached the end.
             if x >= n and y >= m:
-                trace.append(new_v.copy())
                 return backtrack(trace, a, b, d)
 
         v = new_v
+        trace.append(v)
 
     return []
 
@@ -80,25 +88,34 @@ def myers_diff(a, b):
 def backtrack(trace, a, b, d):
     x = len(a)
     y = len(b)
-
     edits = []
 
     for current_d in range(d, 0, -1):
         v = trace[current_d - 1]
+        offset = current_d - 1
 
         k = x - y
 
-        # Decide whether the previous step was
-        # an insertion or a deletion.
+        # Get previous diagonal values.
+        if k - 1 < -offset:
+            left = -1
+        else:
+            left = v[(k - 1) + offset]
+
+        if k + 1 > offset:
+            right = -1
+        else:
+            right = v[(k + 1) + offset]
+
+        # Decide whether previous step was insertion or deletion.
         if k == -current_d or (
-            k != current_d
-            and v.get(k - 1, -1) < v.get(k + 1, -1)
+            k != current_d and left < right
         ):
             previous_k = k + 1
         else:
             previous_k = k - 1
 
-        previous_x = v[previous_k]
+        previous_x = v[previous_k + offset]
         previous_y = previous_x - previous_k
 
         # Matching section (snake).
@@ -132,7 +149,6 @@ def backtrack(trace, a, b, d):
         y -= 1
 
     edits.reverse()
-
     return edits
 
 
@@ -149,7 +165,6 @@ def changed_ranges(old_line, new_line):
     new_changed = []
 
     for operation, char in edits:
-
         if operation == " ":
             old_pos += 1
             new_pos += 1
@@ -213,7 +228,6 @@ def main() -> int:
     edits = myers_diff(a, b)
 
     if command == "lines":
-
         for prefix, line in edits:
             sys.stdout.buffer.write(
                 prefix.encode() + line + b"\n"
@@ -225,7 +239,6 @@ def main() -> int:
     i = 0
 
     while i < len(edits):
-
         prefix, line = edits[i]
 
         # Unchanged line.
@@ -249,7 +262,6 @@ def main() -> int:
         inserted = []
 
         for op, value in block:
-
             if op == "-":
                 deleted.append(value)
             else:
@@ -259,15 +271,12 @@ def main() -> int:
 
         # Output all changes.
         for op, value in block:
-
             sys.stdout.buffer.write(
                 op.encode() + value + b"\n"
             )
 
             if op == "+":
-
                 if insert_index < len(deleted):
-
                     old_line = deleted[insert_index]
                     new_line = value
 
