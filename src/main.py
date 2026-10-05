@@ -1,3 +1,4 @@
+
 import sys
 
 
@@ -18,69 +19,95 @@ def myers_diff(a, b):
     m = len(b)
 
     max_d = n + m
-    offset = max_d
 
-    v = [0] * (2 * max_d + 1)
+    # V[k] stores the furthest x position reached
+    # on diagonal k.
+    v = {0: 0}
+
     trace = []
 
-    for d in range(max_d + 1):
-        for k in range(-d, d + 1, 2):
-            index = k + offset
+    # Follow the initial matching "snake".
+    x = 0
+    y = 0
 
-            if k == -d:
-                x = v[index + 1]
-            elif k == d:
-                x = v[index - 1] + 1
-            elif v[index - 1] < v[index + 1]:
-                x = v[index + 1]
+    while x < n and y < m and a[x] == b[y]:
+        x += 1
+        y += 1
+
+    v[0] = x
+
+    # The two sequences are identical.
+    if x == n and y == m:
+        return [(" ", value) for value in a]
+
+    for d in range(1, max_d + 1):
+        trace.append(v.copy())
+
+        new_v = {}
+
+        for k in range(-d, d + 1, 2):
+
+            # Move down: insertion.
+            if k == -d or (
+                k != d
+                and v.get(k - 1, -1) < v.get(k + 1, -1)
+            ):
+                x = v.get(k + 1, 0)
+
+            # Move right: deletion.
             else:
-                x = v[index - 1] + 1
+                x = v.get(k - 1, 0) + 1
 
             y = x - k
 
+            # Follow matching elements.
             while x < n and y < m and a[x] == b[y]:
                 x += 1
                 y += 1
 
-            v[index] = x
+            new_v[k] = x
 
+            # Reached the end of both sequences.
             if x >= n and y >= m:
-                trace.append(v.copy())
-                return backtrack(trace, a, b, d, offset)
+                trace.append(new_v.copy())
+                return backtrack(trace, a, b, d)
 
-        trace.append(v.copy())
+        v = new_v
 
     return []
 
 
-def backtrack(trace, a, b, d, offset):
+def backtrack(trace, a, b, d):
     x = len(a)
     y = len(b)
+
     edits = []
 
     for current_d in range(d, 0, -1):
         v = trace[current_d - 1]
 
         k = x - y
-        index = k + offset
 
-        if k == -current_d:
-            previous_k = k + 1
-        elif k == current_d:
-            previous_k = k - 1
-        elif v[index - 1] < v[index + 1]:
+        # Decide whether the previous step was
+        # an insertion or a deletion.
+        if k == -current_d or (
+            k != current_d
+            and v.get(k - 1, -1) < v.get(k + 1, -1)
+        ):
             previous_k = k + 1
         else:
             previous_k = k - 1
 
-        previous_x = v[previous_k + offset]
+        previous_x = v[previous_k]
         previous_y = previous_x - previous_k
 
+        # Matching section (snake).
         while x > previous_x and y > previous_y:
             edits.append((" ", a[x - 1]))
             x -= 1
             y -= 1
 
+        # Actual edit operation.
         if x == previous_x:
             edits.append(("+", b[y - 1]))
             y -= 1
@@ -88,15 +115,18 @@ def backtrack(trace, a, b, d, offset):
             edits.append(("-", a[x - 1]))
             x -= 1
 
+    # Remaining matching prefix.
     while x > 0 and y > 0:
         edits.append((" ", a[x - 1]))
         x -= 1
         y -= 1
 
+    # Remaining deletions.
     while x > 0:
         edits.append(("-", a[x - 1]))
         x -= 1
 
+    # Remaining insertions.
     while y > 0:
         edits.append(("+", b[y - 1]))
         y -= 1
@@ -119,6 +149,7 @@ def changed_ranges(old_line, new_line):
     new_changed = []
 
     for operation, char in edits:
+
         if operation == " ":
             old_pos += 1
             new_pos += 1
@@ -152,11 +183,17 @@ def changed_ranges(old_line, new_line):
 
         return ",".join(ranges)
 
-    return make_ranges(old_changed), make_ranges(new_changed)
+    return (
+        make_ranges(old_changed),
+        make_ranges(new_changed)
+    )
 
 
 def main() -> int:
-    if len(sys.argv) != 4 or sys.argv[1] not in ("lines", "highlight"):
+    if len(sys.argv) != 4 or sys.argv[1] not in (
+        "lines",
+        "highlight"
+    ):
         print(
             "usage: main.py lines|highlight A_PATH B_PATH",
             file=sys.stderr
@@ -168,6 +205,7 @@ def main() -> int:
     try:
         a = read_lines(a_path)
         b = read_lines(b_path)
+
     except OSError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -175,6 +213,7 @@ def main() -> int:
     edits = myers_diff(a, b)
 
     if command == "lines":
+
         for prefix, line in edits:
             sys.stdout.buffer.write(
                 prefix.encode() + line + b"\n"
@@ -182,14 +221,19 @@ def main() -> int:
 
         return 0
 
-    # highlight mode
+    # Highlight mode.
     i = 0
 
     while i < len(edits):
+
         prefix, line = edits[i]
 
+        # Unchanged line.
         if prefix == " ":
-            sys.stdout.buffer.write(b" " + line + b"\n")
+            sys.stdout.buffer.write(
+                b" " + line + b"\n"
+            )
+
             i += 1
             continue
 
@@ -205,23 +249,25 @@ def main() -> int:
         inserted = []
 
         for op, value in block:
+
             if op == "-":
                 deleted.append(value)
             else:
                 inserted.append(value)
 
-        delete_index = 0
         insert_index = 0
 
-        # A change block always prints all deletions first,
-        # followed by all insertions.
+        # Output all changes.
         for op, value in block:
+
             sys.stdout.buffer.write(
                 op.encode() + value + b"\n"
             )
 
             if op == "+":
+
                 if insert_index < len(deleted):
+
                     old_line = deleted[insert_index]
                     new_line = value
 
